@@ -1,11 +1,22 @@
 #include <SoftwareSerial.h>
 #include "AlphaBot.h"
+#include <Servo.h>
+#include <Wire.h> 
+#include <Adafruit_L3GD20.h>
+
 AlphaBot Car1 = AlphaBot();
+Servo myservo; 
 
 // Pin Assignment--------------------------------------------------------------------
 SoftwareSerial HM10(0,1); // RX, TX 
 int leftWheel = 2, rightWheel = 3;
 int ECHO = 12, TRIG = 11;
+int SERVO = 10;
+#define GYRO_CS A1 // labeled CS
+#define GYRO_DO A0 // labeled SA0
+#define GYRO_DI A4  // labeled SDA
+#define GYRO_CLK A5 // labeled SCL
+Adafruit_L3GD20 gyro(GYRO_CS, GYRO_DO, GYRO_DI, GYRO_CLK);
 //--------------------------------------------------------------------------------
 
 //Global Variables-------------------------------------------------------------
@@ -18,6 +29,13 @@ int currLeft, currRight;
 //ultrasonic sensor
 double ultrasonicDistance = 0;
 
+//servo motor
+int servoAngle = 0;
+
+//gyro sensor
+double gyroAngle = 0;
+
+
 //------------------------------------------------------------------------------
 
 
@@ -29,9 +47,15 @@ void UltrasonicConfig()
 }
 
 void setup() {
-  UltrasonicConfig();  
+  myservo.attach(SERVO,800,2700);
+  UltrasonicConfig();
   Serial.begin(9600);
   HM10.begin(9600);
+  if (!gyro.begin(gyro.L3DS20_RANGE_250DPS))
+  {
+    Serial.println("Oops ... unable to initialize the L3GD20. Check your wiring!");
+    while (1);
+  }
   Car1.SetSpeed(100);       //Speed:0 - 255
 }
 //-----------------------------------------------------------------------------------
@@ -42,20 +66,63 @@ bool bluetoothReadCommand(char command);
 double updateDistance();
 bool wallFollowing();
 bool straightFollowing();
+void ServoTo90();
+bool ServoToTargetAngle(int angle);
+void ultrasonicDistanceUpdate();
+int AngleSweep();
+inline void GyroToZero();
+void GyroAngleUpdate(double parameter);
 //------------------------------------------------------------------------------------
 
 
 //main loop-----------------------------------------------------------------------
 void loop() { 
   //state 1 Waiting for Start Command 
+  ServoTo90();
+  ServoToTargetAngle(20);
   bluetoothReadCommand('s');
+
+  //int angle = AngleSweep();
+  //Serial.println(angle);
+  //ServoToTargetAngle(angle);
+  //bluetoothReadCommand('s');
   wallFollowing();
   //ultrasonicDistanceUpdate();
-  Serial.println(ultrasonicDistance);
+  //Serial.println(ultrasonicDistance);
 }
 //------------------------------------------------------------------------------------
 
 //Helper functions----------------------------------------------------------------------------------
+int AngleSweep() {
+  int pos;
+  double distanceArray[181];
+  double startAngle = 181;
+  double endAngle = -1;
+  
+  ServoToTargetAngle(0);
+  for (pos = 0; pos <= 180; pos += 1) { 
+    myservo.write(pos);              // tell servo to go to position in variable 'pos'
+    ultrasonicDistanceUpdate();
+    distanceArray[pos] = ultrasonicDistance;
+    servoAngle = pos;
+    delay(15);                       // waits 15ms for the servo to reach the position
+  }
+  ServoToTargetAngle(90);
+  for (pos = 0; pos<=180;pos++){
+    Serial.println(distanceArray[pos]);
+  }
+  for(pos = 1; pos<= 180; pos+= 1){
+    if (distanceArray[pos]-distanceArray[pos-1]>40){
+      endAngle = pos;
+    }
+    else if (distanceArray[pos]-distanceArray[pos-1]<-40){
+      startAngle = pos;
+    }
+  }
+  Serial.println(endAngle);
+   Serial.println(startAngle);
+    return (endAngle+startAngle)/2;
+}
 
 bool wallFollowing(){
  int flag = 0;
@@ -63,12 +130,12 @@ bool wallFollowing(){
  double lastError = 0;
  double error = 0;
  double control;
- double kp=1,ki=0.01,kd=1;
+ double kp=1,ki=0,kd=0;
  double integral, derivative;
- double desiredDistance = 10;
+ double desiredDistance = 15;
 
  delay(1000);
- Car1.MotorRun(120,120);       //Car turn right for 1s; left motor speed:250,right motor speed:0
+ Car1.MotorRun(120,150);       //Car turn right for 1s; left motor speed:250,right motor speed:0
  for (int m = 0;m<200 ;m++){
   ultrasonicDistanceUpdate();
   error = ultrasonicDistance - desiredDistance;
@@ -76,8 +143,9 @@ bool wallFollowing(){
   derivative = error - lastError;
   control = error*kp + integral*ki + derivative*kd;
   lastError = error;
+  control = min(control,50);
   Serial.println(control);
-  Car1.MotorRun(120-control*5,120+control*5);       //Car turn right for 1s; left motor speed:250,right motor speed:
+  Car1.MotorRun(180+control,100-control);       //Car turn right for 1s; left motor speed:250,right motor speed:
   delay(100);
  }
   Car1.Brake();
@@ -117,6 +185,16 @@ bool straightFollowing(){
   rightDistance = 0;
 }
 
+inline void GyroToZero(){
+   gyroAngle = 0;
+}
+
+void GyroAngleUpdate(double parameter){
+  gyro.read();
+  gyroAngle += (parameter)*((int)gyro.data.z-1);
+  delay(100);
+}
+
 void ultrasonicDistanceUpdate()                      // Measure the distance 
 {
   //update the distance read of ultrasonic sensor
@@ -126,6 +204,7 @@ void ultrasonicDistanceUpdate()                      // Measure the distance
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);                // set trig pin low
   ultrasonicDistance = pulseIn(ECHO, HIGH) / 58;  // Read echo pin high level time(us)
+  if (ultrasonicDistance>110) ultrasonicDistance = 110;
   //ultrasonicDistance = ultrasonicDistance / 58;                
   //Y m =（X s * 344）/ 2; 
   //X s =（ 2 * Y m）/ 344;
@@ -156,6 +235,32 @@ bool bluetoothReadCommand(char command){
       Serial.write("\n");
     }
    }
+  }
+}
+
+void ServoTo90(){
+  for (int i; i <=15; i++){
+    myservo.write(90);
+    delay(100);
+  }
+  servoAngle = 90;
+}
+
+bool ServoToTargetAngle(int angle){
+  int pos;
+  if (servoAngle <= angle){
+    for (pos = servoAngle; pos <= angle; pos += 1) {
+      myservo.write(pos);              // tell servo to go to position in variable 'pos'
+      delay(15);                       // waits 15ms for the servo to reach the position
+    }
+    servoAngle = angle;
+  }
+  else{
+    for (pos = servoAngle; pos >= angle; pos -= 1) {
+      myservo.write(pos);              // tell servo to go to position in variable 'pos'
+      delay(15);                       // waits 15ms for the servo to reach the position
+    }
+    servoAngle = angle;
   }
 }
 
