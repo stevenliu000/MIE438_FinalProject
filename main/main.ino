@@ -36,6 +36,7 @@ void setup() {
 }
 //-----------------------------------------------------------------------------------
 
+
 //function definition-------------------------------------------------------------
 bool bluetoothReadCommand(char command);
 double updateDistance();
@@ -68,7 +69,7 @@ bool wallFollowing(){
 
  delay(1000);
  Car1.MotorRun(120,120);       //Car turn right for 1s; left motor speed:250,right motor speed:0
- for (int m = 0;m<80 ;m++){
+ for (int m = 0;m<200 ;m++){
   ultrasonicDistanceUpdate();
   error = ultrasonicDistance - desiredDistance;
   integral = (error+lastError)/2;
@@ -76,7 +77,7 @@ bool wallFollowing(){
   control = error*kp + integral*ki + derivative*kd;
   lastError = error;
   Serial.println(control);
-  Car1.MotorRun(120-control,120+control);       //Car turn right for 1s; left motor speed:250,right motor speed:
+  Car1.MotorRun(120-control*5,120+control*5);       //Car turn right for 1s; left motor speed:250,right motor speed:
   delay(100);
  }
   Car1.Brake();
