@@ -2,7 +2,7 @@
 #include "AlphaBot.h"
 #include <Servo.h>
 #include <Wire.h> 
-#include <Adafruit_L3GD20.h>
+%#include <Adafruit_L3GD20.h>
 AlphaBot Car1 = AlphaBot();
 Servo myservo; 
 
@@ -60,7 +60,7 @@ void setup() {
 
 //function definition-------------------------------------------------------------
 bool bluetoothReadCommand(char command);
-double updateDistance();
+void peDistanceUpdate();
 bool wallFollowing();
 bool straightFollowing();
 void ServoTo90();
@@ -211,7 +211,7 @@ ultrasonicDistanceUpdate();
   ultrasonicDistanceUpdate(); 
   for (int t = 0;t<100;t++){
     delay(1);
-    updateDistance();
+    peDistanceUpdate();
     }
   Error = leftDistance-rightDistance;
   integral = (Error+lastError)/2;
@@ -306,7 +306,7 @@ bool ServoToTargetAngle(int angle){
   }
 }
 
-double updateDistance(){
+void peDistanceUpdate(){
   int i;
   i = digitalRead(leftWheel); //读取码盘状态（0或1）
   if(i != currLeft){ //每次状态发生跳变的时候，即和初始状态j不同时，码盘读数增加1
